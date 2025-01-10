@@ -32,7 +32,7 @@ pub struct Commit {
 
 pub struct Command {
     pub command: String,
-    pub optionalArg: String,
+    pub optional_arg: String,
 }
 
 impl Command {
@@ -42,18 +42,18 @@ impl Command {
         }
 
         let command = args[1].clone();
-        let mut optionalArg = String::from("");
+        let mut optional_arg = String::from("");
 
         if command == "add" || command == "commit" {
             if args.len() < 3 {
                 return Err("Enter a file name");
             }
-            optionalArg = args[2].clone();
+            optional_arg = args[2].clone();
         }
 
         return Ok(Command {
             command,
-            optionalArg,
+            optional_arg,
         });
     }
 }

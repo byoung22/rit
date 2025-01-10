@@ -1,9 +1,5 @@
+mod operations;
 use rit::Command;
-use sha256::digest;
-use std::env;
-use std::fs;
-use std::io::{self, Write};
-use std::path::Path;
 use std::process;
 
 fn main() {
@@ -15,7 +11,10 @@ fn main() {
     });
 
     match command.command.as_str() {
-        "init" => (),
+        "init" => operations::init::init_repo().unwrap_or_else(|err| {
+            eprintln!("Problem initializing repository: {err}");
+            process::exit(1)
+        }),
         "status" => (),
         "add" => (),
         "commit" => (),
@@ -26,6 +25,11 @@ fn main() {
         }
     }
 
+    // use sha256::digest;
+    // use std::env;
+    // use std::fs;
+    // use std::io::{self, Write};
+    // use std::path::Path;
     // let args: Vec<String> = env::args().collect();
     // let command = args[1].clone();
 
