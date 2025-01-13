@@ -173,6 +173,7 @@ dependencies = [
 name = "rit"
 version = "0.1.0"
 dependencies = [
+ "hex",
  "sha256",
 ]
 
