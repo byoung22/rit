@@ -8,9 +8,28 @@ pub enum GitObject {
     Commit(Commit),
 }
 
+impl GitObject {
+    pub fn serialize(&self) -> std::io::Result<(String, Vec<u8>)> {
+        match self {
+            GitObject::Blob(blob) => blob.serialize(),
+            GitObject::Tree(tree) => tree.serialize(),
+            GitObject::Commit(commit) => commit.serialize(),
+        }
+    }
+}
+
+pub trait SerializeObject {
+    fn serialize(&self) -> std::io::Result<(String, Vec<u8>)>;
+}
+
 #[derive(Debug)]
 pub struct Blob {
     pub data: Vec<u8>,
+}
+impl SerializeObject for Blob {
+    fn serialize(&self) -> std::io::Result<(String, Vec<u8>)> {
+        return Ok(("blob".to_string(), self.data.clone()));
+    }
 }
 
 #[derive(Debug)]
@@ -25,6 +44,31 @@ pub struct Tree {
     pub entries: Vec<TreeEntry>,
 }
 
+impl SerializeObject for Tree {
+    fn serialize(&self) -> std::io::Result<(String, Vec<u8>)> {
+        let mut out = Vec::new();
+        for entry in &self.entries {
+            // mode (ASCII)
+            out.extend_from_slice(entry.mode.as_bytes());
+
+            // space
+            out.push(b' ');
+
+            // name (ASCII)
+            out.extend_from_slice(entry.name.as_bytes());
+
+            // null terminator
+            out.push(0);
+
+            // SHA-256 hash (32 bytes)
+            let hash_bytes = hex::decode(&entry.sha).unwrap();
+            out.extend_from_slice(&hash_bytes);
+        }
+
+        return Ok(("tree".to_string(), out));
+    }
+}
+
 #[derive(Debug)]
 pub struct Commit {
     pub tree: String, // SHA-256 hash of the tree object
@@ -32,6 +76,32 @@ pub struct Commit {
     pub author: String,
     pub message: String,
     pub timestamp: u64,
+}
+
+impl SerializeObject for Commit {
+    fn serialize(&self) -> std::io::Result<(String, Vec<u8>)> {
+        let mut out = Vec::new();
+
+        // tree <tree SHA-1>
+        out.extend_from_slice(format!("tree {}\n", self.tree).as_bytes());
+
+        // parent <parent commit SHA-1>   # (optional, for non-initial commits)
+        if let Some(ref parent) = self.parent {
+            out.extend_from_slice(format!("parent {}\n", parent).as_bytes());
+        }
+
+        // author <name> <email> <timestamp> <timezone>
+        out.extend_from_slice(format!("author {} {}\n", self.author, self.timestamp).as_bytes());
+
+        // committer <name> <email> <timestamp> <timezone>
+        out.extend_from_slice(format!("committer {} {}\n", self.author, self.timestamp).as_bytes());
+        out.extend_from_slice(b"\n");
+
+        // <commit message>
+        out.extend_from_slice(self.message.as_bytes());
+
+        return Ok(("commit".to_string(), out));
+    }
 }
 
 pub struct Command {
@@ -66,7 +136,7 @@ impl Command {
 // Stores the object in the ./objects directory as binary
 pub fn store_object(obj: &GitObject) -> std::io::Result<String> {
     // SHA 256 code from hashing the header + the object bytes
-    let (obj_type, bytes) = serialize_object(obj)?;
+    let (obj_type, bytes) = (*obj).serialize()?;
     let mut header_and_bytes = format!("{} {}\0", obj_type, bytes.len())
         .as_bytes()
         .to_vec();
@@ -80,57 +150,4 @@ pub fn store_object(obj: &GitObject) -> std::io::Result<String> {
         fs::write(&object_path, header_and_bytes)?;
     }
     return Ok(sha);
-}
-
-// Uses different hashing algorithms based on the object type
-pub fn serialize_object(obj: &GitObject) -> std::io::Result<(String, Vec<u8>)> {
-    match obj {
-        // Blobs are stored in the format: blob <size>\0<data>
-        GitObject::Blob(blob) => {
-            let data = blob.data.clone();
-            return Ok(("blob".to_string(), data));
-        }
-        // Trees are stored in the format: <file-mode> <filename>\0<SHA of blob or tree>
-        GitObject::Tree(tree) => {
-            let mut out = Vec::new();
-            for entry in &tree.entries {
-                // mode (ASCII)
-                out.extend_from_slice(entry.mode.as_bytes());
-                // space
-                out.push(b' ');
-
-                // name (ASCII)
-                out.extend_from_slice(entry.name.as_bytes());
-                // null terminator
-                out.push(0);
-
-                // SHA-256 hash (32 bytes)
-                let hash_bytes = hex::decode(&entry.sha).unwrap();
-                out.extend_from_slice(&hash_bytes);
-            }
-            return Ok(("tree".to_string(), out));
-        }
-        // commit <size>\0
-        // tree <tree SHA-1>
-        // parent <parent commit SHA-1>   # (optional, for non-initial commits)
-        // author <name> <email> <timestamp> <timezone>
-        // committer <name> <email> <timestamp> <timezone>
-        // <commit message>
-        GitObject::Commit(commit) => {
-            let mut out = Vec::new();
-            out.extend_from_slice(format!("tree {}\n", commit.tree).as_bytes());
-            if let Some(ref parent) = commit.parent {
-                out.extend_from_slice(format!("parent {}\n", parent).as_bytes());
-            }
-            out.extend_from_slice(
-                format!("author {} {}\n", commit.author, commit.timestamp).as_bytes(),
-            );
-            out.extend_from_slice(
-                format!("committer {} {}\n", commit.author, commit.timestamp).as_bytes(),
-            );
-            out.extend_from_slice(b"\n");
-            out.extend_from_slice(commit.message.as_bytes());
-            return Ok(("commit".to_string(), out));
-        }
-    }
 }
