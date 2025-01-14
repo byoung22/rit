@@ -9,25 +9,50 @@ pub enum GitObject {
 }
 
 impl GitObject {
-    pub fn serialize(&self) -> std::io::Result<(String, Vec<u8>)> {
+    pub fn get_sha(&self) -> std::io::Result<String> {
         match self {
-            GitObject::Blob(blob) => blob.serialize(),
-            GitObject::Tree(tree) => tree.serialize(),
-            GitObject::Commit(commit) => commit.serialize(),
+            GitObject::Blob(blob) => blob.calculate_sha(),
+            GitObject::Tree(tree) => tree.calculate_sha(),
+            GitObject::Commit(commit) => commit.calculate_sha(),
         }
     }
 }
 
+// // Write binary to ./objects directory in folders based on the first two characters of the SHA
+// let object_path = format!("./.rit/objects/{}/{}", &sha[0..2], &sha[2..]);
+// if !Path::new(&object_path).exists() {
+//     fs::create_dir_all(format!("./.rit/objects/{}", &sha[0..2]))?;
+//     fs::write(&object_path, header_and_bytes)?;
+// }
+
 pub trait SerializeObject {
-    fn serialize(&self) -> std::io::Result<(String, Vec<u8>)>;
+    fn serialize_data(&self) -> std::io::Result<(String, Vec<u8>)>;
+    fn calculate_sha(&self) -> std::io::Result<String> {
+        // SHA 256 code from hashing the header + the object bytes
+        let (obj_type, bytes) = self.serialize_data()?;
+        let mut header_and_bytes = format!("{} {}\0", obj_type, bytes.len())
+            .as_bytes()
+            .to_vec();
+        header_and_bytes.extend(&bytes);
+        let sha = digest(&header_and_bytes);
+        return Ok(sha);
+    }
 }
 
 #[derive(Debug)]
 pub struct Blob {
     pub data: Vec<u8>,
 }
+
+impl Blob {
+    pub fn new(path: &Path) -> std::io::Result<Blob> {
+        let data = fs::read(path)?;
+        return Ok(Blob { data });
+    }
+}
+
 impl SerializeObject for Blob {
-    fn serialize(&self) -> std::io::Result<(String, Vec<u8>)> {
+    fn serialize_data(&self) -> std::io::Result<(String, Vec<u8>)> {
         return Ok(("blob".to_string(), self.data.clone()));
     }
 }
@@ -45,7 +70,7 @@ pub struct Tree {
 }
 
 impl SerializeObject for Tree {
-    fn serialize(&self) -> std::io::Result<(String, Vec<u8>)> {
+    fn serialize_data(&self) -> std::io::Result<(String, Vec<u8>)> {
         let mut out = Vec::new();
         for entry in &self.entries {
             // mode (ASCII)
@@ -79,7 +104,7 @@ pub struct Commit {
 }
 
 impl SerializeObject for Commit {
-    fn serialize(&self) -> std::io::Result<(String, Vec<u8>)> {
+    fn serialize_data(&self) -> std::io::Result<(String, Vec<u8>)> {
         let mut out = Vec::new();
 
         // tree <tree SHA-1>
@@ -131,23 +156,4 @@ impl Command {
             optional_arg,
         });
     }
-}
-
-// Stores the object in the ./objects directory as binary
-pub fn store_object(obj: &GitObject) -> std::io::Result<String> {
-    // SHA 256 code from hashing the header + the object bytes
-    let (obj_type, bytes) = (*obj).serialize()?;
-    let mut header_and_bytes = format!("{} {}\0", obj_type, bytes.len())
-        .as_bytes()
-        .to_vec();
-    header_and_bytes.extend(&bytes);
-    let sha = digest(&header_and_bytes);
-
-    // Write binary to ./objects directory in folders based on the first two characters of the SHA
-    let object_path = format!("./.rit/objects/{}/{}", &sha[0..2], &sha[2..]);
-    if !Path::new(&object_path).exists() {
-        fs::create_dir_all(format!("./.rit/objects/{}", &sha[0..2]))?;
-        fs::write(&object_path, header_and_bytes)?;
-    }
-    return Ok(sha);
 }

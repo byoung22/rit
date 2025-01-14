@@ -1,8 +1,7 @@
 mod operations;
-use crate::operations::init::init_repo;
-use crate::operations::status::directory_traversal;
+use crate::operations::add::run_add;
+use crate::operations::init::run_init;
 use rit::Command;
-use std::path::Path;
 use std::process;
 
 fn main() {
@@ -14,12 +13,15 @@ fn main() {
     });
 
     match command.command.as_str() {
-        "init" => init_repo().unwrap_or_else(|err| {
+        "init" => run_init().unwrap_or_else(|err| {
             eprintln!("Problem initializing repository: {err}");
             process::exit(1)
         }),
-        "add" => (),
-        "status" => directory_traversal(Path::new("./")),
+        "add" => run_add(&command.optional_arg).unwrap_or_else(|err| {
+            eprintln!("Problem adding files: {err}");
+            process::exit(1)
+        }),
+        "status" => (),
         "commit" => (),
         "log" => (),
         "help" => (),
