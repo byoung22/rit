@@ -1,5 +1,6 @@
 use sha256::digest;
-use std::fs;
+use std::fs::{self, File};
+use std::io::Write;
 use std::path::Path;
 
 pub enum GitObject {
@@ -18,15 +19,10 @@ impl GitObject {
     }
 }
 
-// // Write binary to ./objects directory in folders based on the first two characters of the SHA
-// let object_path = format!("./.rit/objects/{}/{}", &sha[0..2], &sha[2..]);
-// if !Path::new(&object_path).exists() {
-//     fs::create_dir_all(format!("./.rit/objects/{}", &sha[0..2]))?;
-//     fs::write(&object_path, header_and_bytes)?;
-// }
-
 pub trait SerializeObject {
     fn serialize_data(&self) -> std::io::Result<(String, Vec<u8>)>;
+
+    // Calculate the SHA-256 hash of the object and writes the binary to the objects directory
     fn calculate_sha(&self) -> std::io::Result<String> {
         // SHA 256 code from hashing the header + the object bytes
         let (obj_type, bytes) = self.serialize_data()?;
@@ -35,6 +31,18 @@ pub trait SerializeObject {
             .to_vec();
         header_and_bytes.extend(&bytes);
         let sha = digest(&header_and_bytes);
+
+        // // Write the binary data to the ./objects directory
+        // let dir = format!("./objects/{}", &sha[..2]);
+        // let file_path = format!("{}/{}", dir, &sha[2..]);
+
+        // // Create the directory if it doesn't exist
+        // fs::create_dir_all(&dir)?;
+
+        // // Write the binary data to the file
+        // let mut file = File::create(&file_path)?;
+        // file.write_all(&header_and_bytes)?;
+
         return Ok(sha);
     }
 }
